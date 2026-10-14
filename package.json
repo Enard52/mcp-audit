@@ -1,0 +1,46 @@
+{
+  "name": "mcp-audit",
+  "version": "0.1.0",
+  "description": "Security scanner for Model Context Protocol (MCP) servers. Know what your AI tools can access.",
+  "bin": {
+    "mcp-audit": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "security",
+    "audit",
+    "scanner",
+    "claude",
+    "cursor",
+    "ai-security",
+    "supply-chain"
+  ],
+  "author": "Swagata Banerjee <theswagata1@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gitswagata1/mcp-audit"
+  },
+  "homepage": "https://github.com/gitswagata1/mcp-audit",
+  "bugs": {
+    "url": "https://github.com/gitswagata1/mcp-audit/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist"
+  ],
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
