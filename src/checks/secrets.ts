@@ -1,69 +1,118 @@
 import type { McpServer, Finding } from "../types.js";
 
-const SECRET_PATTERNS = [
+const SECRET_KEY_PATTERNS = [
   /api[_-]?key/i,
   /secret/i,
-  /token/i,
+  /\btoken\b/i,
   /password/i,
+  /\bpasswd\b/i,
   /credential/i,
-  /auth/i,
+  /\bauth\b/i,
   /private[_-]?key/i,
   /access[_-]?key/i,
+  /signing[_-]?key/i,
+  /encryption[_-]?key/i,
+  /master[_-]?key/i,
+  /\bdsn\b/i,
+  /connection[_-]?string/i,
+  /database[_-]?url/i,
+  /\bwebhook\b/i,
 ];
 
 const HARDCODED_VALUE_PATTERNS = [
-  /^sk-[a-zA-Z0-9]{20,}$/,        // OpenAI-style
-  /^ghp_[a-zA-Z0-9]{36}$/,        // GitHub PAT
-  /^gho_[a-zA-Z0-9]{36}$/,        // GitHub OAuth
-  /^xoxb-/,                         // Slack bot token
-  /^xoxp-/,                         // Slack user token
-  /^AKIA[0-9A-Z]{16}$/,            // AWS access key
-  /^AIza[0-9A-Za-z_-]{35}$/,       // Google API key
-  /^sk-ant-[a-zA-Z0-9-]{20,}$/,   // Anthropic API key
+  { pattern: /^sk-[a-zA-Z0-9]{20,}$/,             name: "OpenAI" },
+  { pattern: /^sk-ant-[a-zA-Z0-9-]{20,}$/,        name: "Anthropic" },
+  { pattern: /^ghp_[a-zA-Z0-9]{36}$/,             name: "GitHub PAT" },
+  { pattern: /^gho_[a-zA-Z0-9]{36}$/,             name: "GitHub OAuth" },
+  { pattern: /^github_pat_[a-zA-Z0-9_]{22,}$/,    name: "GitHub fine-grained PAT" },
+  { pattern: /^ghs_[a-zA-Z0-9]{36}$/,             name: "GitHub App token" },
+  { pattern: /^xoxb-/,                             name: "Slack bot" },
+  { pattern: /^xoxp-/,                             name: "Slack user" },
+  { pattern: /^xapp-/,                             name: "Slack app" },
+  { pattern: /^AKIA[0-9A-Z]{16}$/,                name: "AWS access key" },
+  { pattern: /^AIza[0-9A-Za-z_-]{35}$/,           name: "Google API key" },
+  { pattern: /^sk_live_[a-zA-Z0-9]{24,}$/,        name: "Stripe live" },
+  { pattern: /^rk_live_[a-zA-Z0-9]{24,}$/,        name: "Stripe restricted" },
+  { pattern: /^sk_test_[a-zA-Z0-9]{24,}$/,        name: "Stripe test" },
+  { pattern: /^SG\.[a-zA-Z0-9_-]{22}\./,          name: "SendGrid" },
+  { pattern: /^AC[a-f0-9]{32}$/,                   name: "Twilio account SID" },
+  { pattern: /^SK[a-f0-9]{32}$/,                   name: "Twilio API key" },
+  { pattern: /^eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\./,  name: "JWT" },
+  { pattern: /^npm_[a-zA-Z0-9]{36}$/,             name: "npm token" },
+  { pattern: /^pypi-[a-zA-Z0-9_-]{20,}$/,         name: "PyPI token" },
+  { pattern: /^sbp_[a-f0-9]{40}$/,                name: "Supabase" },
+  { pattern: /^v[0-9]+\.[a-f0-9]{24}$/,           name: "Vercel" },
+  { pattern: /^neon_[a-zA-Z0-9_-]{20,}$/,         name: "Neon DB" },
+  { pattern: /^DO[A-Z0-9]{40,}$/,                  name: "DigitalOcean" },
+  { pattern: /^hf_[a-zA-Z0-9]{34}$/,              name: "Hugging Face" },
+  { pattern: /^r8_[a-zA-Z0-9]{38}$/,              name: "Replicate" },
+  { pattern: /^AgAAAA[a-zA-Z0-9_-]{30,}$/,        name: "Databricks" },
 ];
 
 export function checkSecrets(server: McpServer): Finding[] {
   const findings: Finding[] = [];
 
   for (const [key, value] of Object.entries(server.env)) {
-    if (SECRET_PATTERNS.some((p) => p.test(key))) {
-      const isHardcoded = HARDCODED_VALUE_PATTERNS.some((p) => p.test(value));
+    if (SECRET_KEY_PATTERNS.some((p) => p.test(key))) {
+      const matched = HARDCODED_VALUE_PATTERNS.find((p) => p.pattern.test(value));
       const isEnvRef = value.startsWith("${") || value.startsWith("$");
 
-      if (isHardcoded) {
+      if (matched) {
         findings.push({
           severity: "critical",
-          title: "Hardcoded secret in config",
-          detail: `Server "${server.name}" has a hardcoded secret in env var "${key}". This value is stored in plaintext on disk. Use environment variable references instead.`,
+          category: "secrets",
+          title: `Hardcoded ${matched.name} secret`,
+          detail: `Server "${server.name}" has a hardcoded ${matched.name} key in env var "${key}". This is stored in plaintext on disk.`,
+          recommendation: `Move the value to an environment variable or secrets manager. Reference it as \${${key}} instead.`,
           server: server.name,
           source: server.source,
         });
       } else if (!isEnvRef && value.length > 10) {
         findings.push({
           severity: "high",
+          category: "secrets",
           title: "Possible hardcoded credential",
-          detail: `Server "${server.name}" has env var "${key}" with a suspicious inline value. Consider using an environment variable reference.`,
+          detail: `Server "${server.name}" has env var "${key}" with a suspicious inline value (${value.length} chars). Consider using an environment variable reference.`,
+          recommendation: `Replace the inline value with an env reference like \${${key}}.`,
           server: server.name,
           source: server.source,
         });
-      } else {
+      } else if (!isEnvRef && value.length > 0) {
         findings.push({
           severity: "info",
-          title: "Secret passed via environment",
-          detail: `Server "${server.name}" receives secret "${key}" via env. Ensure the source variable is not logged or leaked.`,
+          category: "secrets",
+          title: "Short secret value",
+          detail: `Server "${server.name}" has env var "${key}" with a short inline value. Verify it's not a truncated credential.`,
+          recommendation: "Use environment variable references for all secrets, regardless of length.",
           server: server.name,
           source: server.source,
         });
       }
     }
+
+    const matched = HARDCODED_VALUE_PATTERNS.find((p) => p.pattern.test(value));
+    if (matched && !SECRET_KEY_PATTERNS.some((p) => p.test(key))) {
+      findings.push({
+        severity: "critical",
+        category: "secrets",
+        title: `${matched.name} key in non-standard env var`,
+        detail: `Server "${server.name}" has a ${matched.name} key pattern in env var "${key}" (unusual name hides the secret from simple scans).`,
+        recommendation: `Rename to a standard key name and move the value to a secrets manager.`,
+        server: server.name,
+        source: server.source,
+      });
+    }
   }
 
   for (const arg of server.args) {
-    if (HARDCODED_VALUE_PATTERNS.some((p) => p.test(arg))) {
+    const matched = HARDCODED_VALUE_PATTERNS.find((p) => p.pattern.test(arg));
+    if (matched) {
       findings.push({
         severity: "critical",
-        title: "Secret exposed in command args",
-        detail: `Server "${server.name}" has what appears to be an API key passed as a command argument. This is visible in process listings.`,
+        category: "secrets",
+        title: `${matched.name} secret in command args`,
+        detail: `Server "${server.name}" has a ${matched.name} key passed as a command argument. This is visible in process listings and shell history.`,
+        recommendation: "Pass secrets via environment variables, never as CLI arguments.",
         server: server.name,
         source: server.source,
       });

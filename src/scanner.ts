@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "fs";
 import { CONFIG_LOCATIONS } from "./config/locations.js";
+import { parseJsonc } from "./jsonc.js";
 import type { McpServer, McpConfig, RawServerEntry } from "./types.js";
 
 export function discoverConfigs(): { servers: McpServer[]; scannedPaths: string[] } {
@@ -13,12 +14,16 @@ export function discoverConfigs(): { servers: McpServer[]; scannedPaths: string[
 
       try {
         const raw = readFileSync(configPath, "utf-8");
-        const parsed = JSON.parse(raw) as McpConfig;
-        const mcpServers = parsed.mcpServers ?? (parsed as Record<string, unknown>);
+        const parsed = parseJsonc(raw) as McpConfig;
+
+        const mcpServers =
+          parsed.mcpServers ??
+          (parsed as Record<string, unknown>)["servers"] ??
+          (parsed as Record<string, unknown>);
 
         if (typeof mcpServers !== "object" || mcpServers === null) continue;
 
-        for (const [name, entry] of Object.entries(mcpServers)) {
+        for (const [name, entry] of Object.entries(mcpServers as Record<string, unknown>)) {
           if (!isServerEntry(entry)) continue;
 
           servers.push({
@@ -26,12 +31,13 @@ export function discoverConfigs(): { servers: McpServer[]; scannedPaths: string[
             command: entry.command ?? "",
             args: entry.args ?? [],
             env: entry.env ?? {},
+            url: entry.url ?? "",
             source: location.name,
             sourcePath: configPath,
           });
         }
       } catch {
-        // malformed config — skip
+        // malformed config — skip silently
       }
     }
   }

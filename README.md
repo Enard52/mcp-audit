@@ -5,7 +5,7 @@
 ### Know what your AI tools can access. In 5 seconds.
 
 Security scanner for [Model Context Protocol](https://modelcontextprotocol.io) servers.<br/>
-Finds dangerous permissions, hardcoded secrets, and supply chain risks across all your MCP configs.
+Finds dangerous permissions, hardcoded secrets, supply chain risks, and transport vulnerabilities across all your MCP configs.
 
 **One command. Zero config. Zero dependencies.**
 
@@ -19,6 +19,8 @@ npx mcp-audit
 <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT" />
 <img src="https://img.shields.io/badge/node-%3E%3D18-brightgreen?style=flat-square" alt="node" />
 <img src="https://img.shields.io/badge/dependencies-0-brightgreen?style=flat-square" alt="zero deps" />
+<img src="https://img.shields.io/badge/checks-40+-blue?style=flat-square" alt="40+ checks" />
+<img src="https://img.shields.io/badge/grade-A--F_scoring-purple?style=flat-square" alt="grading" />
 
 </div>
 
@@ -26,7 +28,7 @@ npx mcp-audit
 
 ## The Problem
 
-MCP servers are the new plugins. Every AI IDE supports them — Claude, Cursor, Windsurf, VS Code. Developers install them freely.
+MCP servers are the new plugins. Every AI IDE supports them — Claude, Cursor, Windsurf, Zed, Copilot, and more. Developers install them freely.
 
 But each MCP server can:
 - **Execute shell commands** on your machine
@@ -34,6 +36,7 @@ But each MCP server can:
 - **Access your API keys** passed via environment variables
 - **Make network requests** to any endpoint
 - **Run unpinned packages** from npm/PyPI with zero verification
+- **Exfiltrate data** through remote SSE/HTTP endpoints
 
 There's no `npm audit` for MCP. **Until now.**
 
@@ -41,111 +44,202 @@ There's no `npm audit` for MCP. **Until now.**
 
 ## What It Scans
 
-| Source | Config Location |
-|--------|----------------|
+| Client | Config Locations |
+|--------|-----------------|
 | Claude Desktop | `~/Library/Application Support/Claude/`, `%APPDATA%/Claude/`, `~/.config/claude/` |
-| Claude Code | `.claude/settings.json`, `.mcp.json` |
+| Claude Code | `~/.claude.json`, `.claude/settings.json`, `.mcp.json` |
 | Cursor | `~/.cursor/mcp.json`, `.cursor/mcp.json` |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Windsurf | `~/.codeium/windsurf/`, `.windsurf/` |
+| Zed | `~/.config/zed/settings.json`, platform-specific |
+| Cline | `~/.cline/mcp_settings.json`, `.cline/` |
+| Roo Code | `~/.roo/mcp.json`, `.roo/` |
+| Amazon Q | `~/.aws/amazonq/mcp.json` |
+| GitHub Copilot | `.github/copilot-mcp.json` |
 | VS Code (Continue) | `~/.continue/config.json` |
+| Project root | `mcp.json` |
 
 ## What It Checks
 
+### Permissions (Critical → Medium)
+
 | Check | Severity | What it catches |
 |-------|----------|-----------------|
-| **Shell access** | Critical | Servers spawning bash/sh/cmd — unrestricted command execution |
-| **Hardcoded secrets** | Critical | API keys (OpenAI, Anthropic, AWS, GitHub) stored in plaintext config |
-| **Secret in args** | Critical | API keys passed as command arguments — visible in process listings |
-| **Privileged containers** | Critical | Docker `--privileged` mode — near-host-level access |
-| **Filesystem access** | High | Servers with read/write access to your filesystem |
-| **Dangerous flags** | High | `--allow-write`, `--no-sandbox`, `sudo`, etc. |
-| **Unverified packages** | Medium | Packages not from known publishers (Anthropic, Cloudflare, etc.) |
-| **Unpinned versions** | Medium | `npx some-package` without `@version` — supply chain risk |
-| **Network access** | Medium | Servers with fetch/browser/scraping capabilities |
-| **Env secret passing** | Info | Secrets passed via env (correctly, but flagged for awareness) |
+| Shell access | Critical | Servers spawning bash/sh/cmd/powershell — unrestricted execution |
+| Overly broad filesystem | Critical | Access to `/`, `~`, `C:\` — the entire filesystem |
+| Remote code execution | Critical | Scripts fetched and executed from URLs |
+| Dangerous flags | Critical–High | `--no-sandbox`, `--allow-all`, `sudo`, `--privileged` |
+| Filesystem access | High | Read/write access to disk with scope info |
+| Shell metacharacters | High | `|`, `;`, `` ` ``, `$()` in args — command injection risk |
+| Network access | Medium | Fetch, puppeteer, browser, scraping capabilities |
+
+### Secrets (Critical → Info)
+
+| Check | Severity | What it catches |
+|-------|----------|-----------------|
+| Hardcoded API keys | Critical | 25+ patterns: OpenAI, Anthropic, AWS, GitHub, Stripe, Twilio, Slack, Google, SendGrid, Supabase, npm, PyPI, Hugging Face, Replicate, JWT... |
+| Secret in command args | Critical | API keys visible in process listings and shell history |
+| Hidden secrets | Critical | Keys in non-standard env var names (evades simple scanners) |
+| Possible credentials | High | Suspicious inline values that match credential heuristics |
+
+### Supply Chain (Critical → Medium)
+
+| Check | Severity | What it catches |
+|-------|----------|-----------------|
+| Privileged containers | Critical | Docker/Podman `--privileged` — near-host access |
+| Sensitive volume mounts | Critical | Mounting `/`, `/home`, `/etc` into containers |
+| Host network/PID | High | `--network=host`, `--pid=host` — shared namespaces |
+| Typosquat indicators | High | Package names matching common typosquatting patterns |
+| Unverified packages | Medium | Not from 20+ known publishers (Anthropic, Cloudflare, Stripe, Prisma, etc.) |
+| Unpinned versions | Medium | `npx pkg` without `@version` — supply chain risk |
+| Auto-confirm flags | Medium | `--yes`/`-y` on package runners — silent installs |
+
+### Transport (Critical → Info)
+
+| Check | Severity | What it catches |
+|-------|----------|-----------------|
+| Credentials in URL | Critical | `user:pass@` embedded in server URLs |
+| Unencrypted HTTP | High | Plain HTTP transport for remote MCP servers |
+| Malformed URLs | Medium | Unparseable server endpoints |
+| Remote server info | Info | HTTPS remote servers — trust verification reminder |
+
+### Environment (Critical → High)
+
+| Check | Severity | What it catches |
+|-------|----------|-----------------|
+| Library injection | Critical | `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES` — runs arbitrary code before main process |
+| Proxy + credentials | Critical | Proxy env vars + secrets in same server — credential interception risk |
+| PATH hijack | Critical | `.` or empty entries in PATH — arbitrary binary execution |
+| Runtime hijack | High | `NODE_OPTIONS`, `PYTHONPATH`, `PYTHONSTARTUP`, `JAVA_TOOL_OPTIONS`, `RUBYOPT` |
+| Proxy override | High | `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` — traffic interception |
+| TLS/SSH interception | High | `CURL_CA_BUNDLE`, `SSL_CERT_FILE`, `GIT_SSH_COMMAND` — MITM vectors |
+| Credential reuse | Medium | Same secret value shared across multiple servers |
+
+### Config Hygiene (Critical → Low)
+
+| Check | Severity | What it catches |
+|-------|----------|-----------------|
+| World-writable config | Critical | Config files writable by any user — attacker can inject servers |
+| World-readable config | High | Config files with secrets readable by any user |
+| Shadow servers | High | Same name, different command across configs |
+| Group-writable config | Medium | Config files writable by group members |
+| No command or URL | Medium | Broken server entries that can't start |
+| Duplicate definitions | Low | Same server in multiple config files |
+| Excess env vars | Low | Too many env vars not referenced in command |
 
 ---
+
+## Security Grade
+
+Every audit produces an overall **security grade** (A–F) and per-server scores:
+
+| Grade | Score | Meaning |
+|-------|-------|---------|
+| **A** | 90–100 | Clean or only informational findings |
+| **B** | 75–89 | Minor issues, no critical risks |
+| **C** | 50–74 | Multiple medium-severity issues |
+| **D** | 25–49 | Significant security concerns |
+| **F** | 0–24 | Critical vulnerabilities present |
+
+---
+
+## CLI Options
+
+```
+npx mcp-audit                    Scan all MCP configs
+npx mcp-audit --verbose          Show paths, recommendations, file locations
+npx mcp-audit --json             Machine-readable JSON (with scores and metadata)
+npx mcp-audit --markdown         Output as Markdown (for PRs, CI comments)
+npx mcp-audit --severity high    Only show high+ findings
+npx mcp-audit --help             Full help
+```
 
 ## Example Output
 
 ```
-  mcp-audit — security scanner for MCP servers
-  ──────────────────────────────────────────────────
+  mcp-audit v0.3.0 — security scanner for MCP servers
+  ────────────────────────────────────────────────────────
 
-  Servers discovered: 4
+  Servers discovered: 6
 
-  filesystem  (Claude Desktop)
-    cmd: npx -y @modelcontextprotocol/server-filesystem /Users/me/Documents
-    env: (none)
+  shell-danger  (Claude Code)  stdio  🔵 B (1 issue)
+    cmd: bash -c echo hello
 
-  github  (Claude Desktop)
-    cmd: npx -y @modelcontextprotocol/server-github
-    env: GITHUB_TOKEN
+  filesystem-root  (Claude Code)  stdio  🔵 B (1 issue)
+    cmd: npx @modelcontextprotocol/server-filesystem /
 
-  my-custom-server  (Cursor)
-    cmd: npx some-random-mcp-server
-    env: API_KEY, DB_PASSWORD
+  leaky-server  (Claude Code)  stdio  🔴 F (7 issues)
+    cmd: npx some-random-pkg
+    env: API_KEY, DATABASE_URL, HTTP_PROXY, NODE_OPTIONS
 
-  shell-tool  (Claude Code (project))
-    cmd: bash -c
-    env: (none)
+  http-remote  (Claude Code)  remote  🔵 B (2 issues)
+    url: http://dangerous.example.com/mcp
 
-  Findings: 6
+  docker-priv  (Claude Code)  stdio  🟠 D (3 issues)
+    cmd: docker run --privileged --network=host some-image
 
-  CRITICAL  Direct shell access
-    Server "shell-tool" spawns a shell (bash). This grants unrestricted
-    command execution on your machine.
-    server: shell-tool · source: Claude Code (project)
+  safe-server  (Claude Code)  stdio  🟢 A
+    cmd: npx @modelcontextprotocol/server-brave-search@1.2.0
+    env: BRAVE_API_KEY
 
-  CRITICAL  Hardcoded secret in config
-    Server "my-custom-server" has a hardcoded secret in env var "API_KEY".
-    This value is stored in plaintext on disk.
-    server: my-custom-server · source: Cursor
+  Findings: 14
 
-  HIGH  Filesystem access
-    Server "filesystem" has filesystem access (/Users/me/Documents).
-    It can read and potentially modify files.
-    server: filesystem · source: Claude Desktop
+  🛑 CRITICAL [Permissions] Direct shell access
+    Server "shell-danger" spawns a shell (bash).
+    → Replace with a purpose-built MCP server. Never grant raw shell access.
 
-  MEDIUM  Unverified package
-    Server "my-custom-server" runs "some-random-mcp-server" via npx.
-    This package is not from a known verified publisher.
-    server: my-custom-server · source: Cursor
+  🛑 CRITICAL [Secrets] Hardcoded Anthropic secret
+    Server "leaky-server" has a hardcoded Anthropic key in env var "API_KEY".
+    → Move to an environment variable or secrets manager.
 
-  MEDIUM  Unpinned package version
-    Server "my-custom-server" runs "some-random-mcp-server" without a
-    pinned version. A compromised future release could execute malicious code.
-    server: my-custom-server · source: Cursor
+  🛑 CRITICAL [Environment] Proxy + credentials combination
+    Server "leaky-server" has proxy and credentials in env. Interception risk.
+    → Remove proxy env vars or ensure they use trusted HTTPS endpoints.
 
-  INFO  Secret passed via environment
-    Server "github" receives secret "GITHUB_TOKEN" via env.
-    server: github · source: Claude Desktop
+  🟠 HIGH [Environment] Dangerous env var: NODE_OPTIONS
+    Server "leaky-server" sets NODE_OPTIONS. Risk: flag injection.
+    → Remove unless absolutely required.
 
-  ──────────────────────────────────────────────────
+  🟠 HIGH [Transport] Unencrypted HTTP transport
+    Server "http-remote" connects over plain HTTP. Traffic is unencrypted.
+    → Use HTTPS (TLS) for all remote MCP connections.
 
-  ACTION REQUIRED
-  4 servers · 6 findings (2 critical, 1 high, 2 medium, 1 info)
-  5 config paths scanned · 2026-10-14T12:00:00.000Z
+  ... (8 more findings)
+
+  ────────────────────────────────────────────────────────
+
+  🔴 Security Grade: F  (0/100)
+  5 of 6 servers have issues
+  14 findings (6 critical, 5 high, 3 medium)
+  by category: 4 permissions, 4 supply chain, 3 environment, 2 secrets, 1 transport
+  3 config paths scanned
 ```
 
 ---
 
 ## CI / Automation
 
-Use `--json` for machine-readable output. Exits with code `2` on critical findings, `1` on high.
+Machine-readable JSON (with scores and metadata):
 
 ```bash
 npx mcp-audit --json
 ```
 
-Add to your CI pipeline:
+Markdown for PR comments:
+
+```bash
+npx mcp-audit --markdown >> $GITHUB_STEP_SUMMARY
+```
+
+GitHub Actions:
 
 ```yaml
 - name: Audit MCP servers
-  run: npx mcp-audit
-```
+  run: npx mcp-audit --severity high
 
----
+- name: Post audit to PR summary
+  run: npx mcp-audit --markdown >> $GITHUB_STEP_SUMMARY
+  if: always()
+```
 
 ## Exit Codes
 
@@ -164,6 +258,8 @@ Add to your CI pipeline:
 - [ ] Community-maintained vulnerability database for MCP packages
 - [ ] Policy file (`.mcp-audit.yml`) for custom rules and allowlists
 - [ ] VS Code / Cursor extension
+- [ ] Watch mode — re-scan on config changes
+- [ ] Scoring system — overall security grade (A–F)
 
 ---
 
