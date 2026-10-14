@@ -263,6 +263,15 @@ GitHub Actions:
 
 ---
 
+## Try the Demo
+
+```bash
+git clone https://github.com/gitswagata1/mcp-audit
+cd mcp-audit
+npm install && npm run build
+bash demo/run-demo.sh
+```
+
 ## Contributing
 
 PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
