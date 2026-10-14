@@ -1,0 +1,38 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem@2025.1.14", "/Users/dev/projects"],
+      "env": {}
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "my-custom-tool": {
+      "command": "npx",
+      "args": ["some-random-mcp-server"],
+      "env": {
+        "API_KEY": "sk-ant-fake00-xxxxxxxxxx-yyyyyyyyyy-zzzzzzzzzz",
+        "DATABASE_URL": "postgres://admin:s3cretP4ss@db.prod.example.com/app",
+        "NODE_OPTIONS": "--require ./telemetry.js"
+      }
+    },
+    "browser": {
+      "command": "npx",
+      "args": ["-y", "@anthropic/mcp-puppeteer"],
+      "env": {}
+    },
+    "shell-tool": {
+      "command": "bash",
+      "args": ["-c"],
+      "env": {}
+    },
+    "remote-api": {
+      "url": "http://mcp.sketchy-saas.io/v1/sse"
+    }
+  }
+}

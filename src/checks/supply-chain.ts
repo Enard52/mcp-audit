@@ -33,19 +33,21 @@ const TYPOSQUAT_INDICATORS = [
   /-new$/,
 ];
 
+const RUNNER_FLAGS = new Set(["-y", "--yes", "-q", "--quiet", "-p", "--package", "--prefer-online", "--prefer-offline"]);
+
 export function checkSupplyChain(server: McpServer): Finding[] {
   const findings: Finding[] = [];
 
   if (PACKAGE_RUNNERS.has(server.command)) {
-    const pkg = server.args[0] ?? "";
+    const pkg = server.args.find(a => !a.startsWith("-") && !RUNNER_FLAGS.has(a)) ?? "";
 
-    if (!pkg || pkg.startsWith("-")) {
+    if (!pkg) {
       findings.push({
         severity: "high",
         category: "supply-chain",
         title: "Package runner with no clear package",
-        detail: `Server "${server.name}" runs "${server.command}" with flags before the package name or no package at all. This may execute an unintended package.`,
-        recommendation: "Ensure the package name is the first argument after the runner command.",
+        detail: `Server "${server.name}" runs "${server.command}" with no identifiable package name. This may execute an unintended package.`,
+        recommendation: "Ensure the package name is specified in the arguments.",
         server: server.name,
         source: server.source,
       });
@@ -90,7 +92,7 @@ export function checkSupplyChain(server: McpServer): Finding[] {
       });
     }
 
-    if (server.args.includes("--yes") || server.args.includes("-y")) {
+    if (server.args.some(a => a === "--yes" || a === "-y")) {
       findings.push({
         severity: "medium",
         category: "supply-chain",

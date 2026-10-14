@@ -58,8 +58,13 @@ describe("checkSupplyChain", () => {
     assert.ok(findings.some(f => f.title === "Host PID namespace"));
   });
 
-  it("flags flags-before-package", () => {
-    const findings = checkSupplyChain(server({ args: ["--yes", "some-pkg"] }));
+  it("finds package after known flags like -y", () => {
+    const findings = checkSupplyChain(server({ args: ["-y", "some-pkg@1.0.0"] }));
+    assert.ok(!findings.some(f => f.title === "Package runner with no clear package"));
+  });
+
+  it("flags runner with only flags and no package", () => {
+    const findings = checkSupplyChain(server({ args: ["--unknown-flag"] }));
     assert.ok(findings.some(f => f.title === "Package runner with no clear package"));
   });
 
